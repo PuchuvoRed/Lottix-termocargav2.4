@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const MESES    = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -11,7 +11,7 @@ function calcular(v, pF, pC){ const f=v*(1-pF/100); return {f, c:f*(1-pC/100)}; 
 function fmt(n){ return "$"+Math.round(n).toLocaleString("es-CO"); }
 function quinceTexto(r){ return r.quincena+"ª Q de "+MESES[r.mes]+" "+r.anio; }
 
-let uid=0;
+let uid = Date.now();
 function mkReg(placa,q,mes,anio,v,pF,pC){
   uid++;
   const {f,c}=calcular(v,pF,pC);
@@ -63,9 +63,7 @@ function exportarCSV(placa, registros, nombre){
   URL.revokeObjectURL(url);
 }
 
-// ══════════════════════════════════════════════════════════════════
 // PANTALLA DE LOGIN
-// ══════════════════════════════════════════════════════════════════
 function LoginScreen({ onLogin, claveActual }) {
   const [input,    setInput]    = useState("");
   const [verClave, setVerClave] = useState(false);
@@ -86,20 +84,15 @@ function LoginScreen({ onLogin, claveActual }) {
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#cc0000 0%,#7a0000 60%,#3a0000 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
-
-      {/* Logo */}
       <div style={{textAlign:"center",marginBottom:36}}>
         <div style={{fontSize:56,marginBottom:8}}>🚛</div>
-        <div style={{color:"#fff",fontSize:26,fontWeight:800,letterSpacing:1}}>TERMOCARGA </div>
+        <div style={{color:"#fff",fontSize:26,fontWeight:800,letterSpacing:1}}>TERMO CARGA</div>
         <div style={{color:"#ffaaaa",fontSize:12,marginTop:4,fontStyle:"italic"}}>Sistema de Gestión de Pagos</div>
       </div>
 
-      {/* Card de login */}
       <div style={{
         background:"#fff",borderRadius:20,padding:"28px 24px",width:"100%",maxWidth:360,
-        boxShadow:"0 20px 60px rgba(0,0,0,0.4)",
-        transform: shake ? "translateX(0)" : "translateX(0)",
-        animation: shake ? "none" : "none"
+        boxShadow:"0 20px 60px rgba(0,0,0,0.4)"
       }}>
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:28}}>🔐</div>
@@ -143,9 +136,7 @@ function LoginScreen({ onLogin, claveActual }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
 // MODAL CAMBIAR CLAVE
-// ══════════════════════════════════════════════════════════════════
 function CambiarClaveModal({ claveActual, onGuardar, onCerrar }){
   const [actual,   setActual]   = useState("");
   const [nueva,    setNueva]    = useState("");
@@ -200,17 +191,23 @@ function CambiarClaveModal({ claveActual, onGuardar, onCerrar }){
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
 // APP PRINCIPAL
-// ══════════════════════════════════════════════════════════════════
 export default function App(){
   const [autenticado,   setAutenticado]   = useState(false);
-  const [clave,         setClave]         = useState(CLAVE_DEFAULT);
+  const [clave,         setClave]         = useState(() => {
+    return localStorage.getItem("termocarga_clave") || CLAVE_DEFAULT;
+  });
   const [modalClave,    setModalClave]    = useState(false);
   const [menuAbierto,   setMenuAbierto]   = useState(false);
 
   const [tab,   setTab]   = useState(0);
-  const [datos, setDatos] = useState(DEMO);
+  
+  // Cargar datos persistidos o usar la lista DEMO la primera vez
+  const [datos, setDatos] = useState(() => {
+    const saved = localStorage.getItem("termocarga_datos");
+    return saved ? JSON.parse(saved) : DEMO;
+  });
+
   const [modal, setModal] = useState(null);
 
   const [pctF, setPctF] = useState("8.2");
@@ -228,6 +225,17 @@ export default function App(){
   const [filtQ,     setFiltQ]     = useState("Todas");
   const [busqPlaca, setBusqPlaca] = useState("");
   const [vehiculoSel,setVehiculoSel] = useState(null);
+
+  // Persistir cambios en los datos en el navegador
+  useEffect(() => {
+    localStorage.setItem("termocarga_datos", JSON.stringify(datos));
+  }, [datos]);
+
+  // Persistir cambios de contraseña
+  const handleGuardarClave = (nuevaClave) => {
+    setClave(nuevaClave);
+    localStorage.setItem("termocarga_clave", nuevaClave);
+  };
 
   const pF = parseFloat(pctF)||0;
   const pC = parseFloat(pctC)||0;
@@ -288,7 +296,6 @@ export default function App(){
     setTab(0); setVehiculoSel(null);
   }
 
-  // ── Estilos base ─────────────────────────────────────────────────
   const INPUT={width:"100%",padding:"10px 12px",border:"1.5px solid #ddd",borderRadius:8,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"#fff",color:"#222"};
   const BTN_ROJO={width:"100%",padding:13,background:"linear-gradient(90deg,#cc0000,#960000)",color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginBottom:8};
   const BTN_BORDE={width:"100%",padding:10,background:"#fff",color:"#cc0000",border:"1.5px solid #cc0000",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer",marginBottom:8};
@@ -298,7 +305,6 @@ export default function App(){
   }
   const COLORES_PLACA=["#cc0000","#1e64c8","#008c3c","#7c3aed","#c2600a","#0891b2"];
 
-  // ── LOGIN ─────────────────────────────────────────────────────────
   if(!autenticado){
     return <LoginScreen onLogin={()=>setAutenticado(true)} claveActual={clave}/>;
   }
@@ -306,10 +312,8 @@ export default function App(){
   return (
     <div style={{fontFamily:"'Segoe UI',sans-serif",background:"#f2f2f2",minHeight:"100vh",display:"flex",flexDirection:"column",maxWidth:480,margin:"0 auto"}}>
 
-      {/* MODALES */}
-      {modalClave && <CambiarClaveModal claveActual={clave} onGuardar={setClave} onCerrar={()=>setModalClave(false)}/>}
+      {modalClave && <CambiarClaveModal claveActual={clave} onGuardar={handleGuardarClave} onCerrar={()=>setModalClave(false)}/>}
 
-      {/* Menú desplegable */}
       {menuAbierto && (
         <div style={{position:"fixed",inset:0,zIndex:800}} onClick={()=>setMenuAbierto(false)}>
           <div style={{position:"absolute",top:70,right:12,background:"#fff",borderRadius:12,boxShadow:"0 8px 30px rgba(0,0,0,0.15)",overflow:"hidden",minWidth:200}} onClick={e=>e.stopPropagation()}>
@@ -329,7 +333,6 @@ export default function App(){
         </div>
       )}
 
-      {/* HEADER */}
       <div style={{background:"linear-gradient(90deg,#cc0000,#960000)",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:26}}>🚛</span>
@@ -347,7 +350,6 @@ export default function App(){
         </div>
       </div>
 
-      {/* TABS */}
       <div style={{background:"#fff",borderBottom:"1px solid #e0e0e0",display:"flex",position:"sticky",top:62,zIndex:99}}>
         {["✚ Liquidar","📋 Historial","🚛 Vehículos"].map((t,i)=>(
           <button key={i} onClick={()=>{setTab(i);if(i!==2)setVehiculoSel(null);}} style={{
@@ -361,11 +363,9 @@ export default function App(){
 
       <div style={{flex:1,overflowY:"auto"}}>
 
-      {/* ══ TAB 0 – LIQUIDAR ══ */}
       {tab===0&&(
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:14}}>
 
-          {/* Porcentajes editables */}
           <div style={{background:"#fff",borderRadius:12,padding:14,border:"1.5px solid #ffcccc"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -393,7 +393,6 @@ export default function App(){
             )}
           </div>
 
-          {/* Formulario */}
           <div style={{background:"#fff",borderRadius:12,padding:16}}>
             <div style={{fontWeight:700,fontSize:13,color:"#cc0000",marginBottom:14}}>Datos del Vehículo</div>
             {msg&&<div style={{background:"#fff3cd",border:"1px solid #ffc107",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#856404"}}>{msg}</div>}
@@ -444,7 +443,6 @@ export default function App(){
             </div>
           </div>
 
-          {/* Últimas liquidaciones */}
           <div style={{background:"#fff",borderRadius:12,overflow:"hidden"}}>
             <div style={{background:"#fff5f5",padding:"10px 14px",borderBottom:"1px solid #ffcccc"}}>
               <span style={{color:"#960000",fontWeight:700,fontSize:12}}>🕐 Últimas liquidaciones</span>
@@ -469,7 +467,6 @@ export default function App(){
         </div>
       )}
 
-      {/* ══ TAB 1 – HISTORIAL ══ */}
       {tab===1&&(
         <div>
           <div style={{background:"#fff5f5",padding:"12px 14px",borderBottom:"1px solid #ffcccc",display:"flex",flexDirection:"column",gap:8}}>
@@ -528,7 +525,6 @@ export default function App(){
         </div>
       )}
 
-      {/* ══ TAB 2 – VEHÍCULOS ══ */}
       {tab===2&&(
         vehiculoSel ? (
           <div>
@@ -627,7 +623,6 @@ export default function App(){
       )}
       </div>
 
-      {/* MODAL LIQUIDACIÓN */}
       {modal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:999}}>
           <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 36px"}}>
@@ -666,47 +661,9 @@ export default function App(){
         </div>
       )}
 
-      <div
-  style={{
-    background: "#960000",
-    padding: "10px 0",
-    textAlign: "center",
-    borderTop: "1px solid #b30000"
-  }}
->
-  <div
-    style={{
-      color: "#ffffff",
-      fontWeight: "bold",
-      fontSize: 13,
-      letterSpacing: 1
-    }}
-  >
-    NOVA LAB
-  </div>
-
-  <div
-    style={{
-      color: "#ffcccc",
-      fontSize: 11
-    }}
-  >
-    Software Intelligence
-  </div>
-
-  <div
-    style={{
-      color: "#dddddd",
-      fontSize: 10,
-      marginTop: 4
-    }}
-  >
-    NovaLab v2.4 • Acceso protegido
-  </div>
-
-</div>
-
- </div>
-
-);
+      <div style={{background:"#960000",padding:"6px 0",textAlign:"center"}}>
+        <span style={{color:"#ffcccc",fontSize:10}}>Termo Carga · v2.4 · Acceso protegido 🔐</span>
+      </div>
+    </div>
+  );
 }
