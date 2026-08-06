@@ -7,15 +7,22 @@ const HOY      = new Date();
 const ANIO_ACTUAL = HOY.getFullYear();
 const CLAVE_DEFAULT = "termocarga2025";
 
-function calcular(v, pF, pC){ const f=v*(1-pF/100); return {f, c:f*(1-pC/100)}; }
+function calcular(v, pF, pC){ 
+  const descF = v * (pF / 100);
+  const f = v - descF;
+  const descC = f * (pC / 100);
+  const c = f - descC;
+  return { f, c, descF, descC }; 
+}
+
 function fmt(n){ return "$"+Math.round(n).toLocaleString("es-CO"); }
 function quinceTexto(r){ return r.quincena+"ª Q de "+MESES[r.mes]+" "+r.anio; }
 
 let uid = Date.now();
 function mkReg(placa,q,mes,anio,v,pF,pC){
   uid++;
-  const {f,c}=calcular(v,pF,pC);
-  return {id:uid,placa,quincena:q,mes,anio,valorViajes:v,valorFactura:f,valorConsignar:c,pF,pC};
+  const {f,c,descF,descC}=calcular(v,pF,pC);
+  return {id:uid,placa,quincena:q,mes,anio,valorViajes:v,valorFactura:f,valorConsignar:c,descF,descC,pF,pC};
 }
 
 const DEMO=[
@@ -26,35 +33,80 @@ const DEMO=[
 ];
 
 function imprimirPDF(placa, registros){
-  const total={v:0,f:0,c:0};
-  registros.forEach(r=>{total.v+=r.valorViajes;total.f+=r.valorFactura;total.c+=r.valorConsignar;});
-  const filas=registros.map((r,i)=>`
+  const total={v:0,f:0,c:0,df:0,dc:0};
+  registros.forEach(r=>{
+    total.v += r.valorViajes;
+    total.df += (r.descF || (r.valorViajes - r.valorFactura));
+    total.f += r.valorFactura;
+    total.dc += (r.descC || (r.valorFactura - r.valorConsignar));
+    total.c += r.valorConsignar;
+  });
+
+  const filas=registros.map((r,i)=>{
+    const dF = r.descF || (r.valorViajes - r.valorFactura);
+    const dC = r.descC || (r.valorFactura - r.valorConsignar);
+    return `
     <tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
       <td>${quinceTexto(r)}</td>
       <td style="text-align:right">${fmt(r.valorViajes)}</td>
-      <td style="text-align:right;color:#c85000">${r.pF}%</td>
-      <td style="text-align:right;color:#c85000">${fmt(r.valorFactura)}</td>
-      <td style="text-align:right;color:#006b2e">${r.pC}%</td>
+      <td style="text-align:right;color:#c85000">−${fmt(dF)} (${r.pF}%)</td>
+      <td style="text-align:right;color:#c85000;font-weight:600">${fmt(r.valorFactura)}</td>
+      <td style="text-align:right;color:#006b2e">−${fmt(dC)} (${r.pC}%)</td>
       <td style="text-align:right;color:#006b2e;font-weight:700">${fmt(r.valorConsignar)}</td>
-    </tr>`).join("");
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Historial ${placa}</title>
-  <style>body{font-family:Arial,sans-serif;margin:24px;color:#222;font-size:12px}h1{color:#cc0000;font-size:20px;margin:0}.sub{color:#888;font-size:11px;margin-bottom:20px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#cc0000;color:#fff;padding:8px 10px;text-align:center;font-size:11px}td{padding:7px 10px;border-bottom:1px solid #eee;font-size:11px}.totals td{font-weight:700;background:#f0f0f0;border-top:2px solid #cc0000}.footer{margin-top:24px;font-size:10px;color:#aaa;text-align:center}.badge{display:inline-block;background:#cc0000;color:#fff;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;margin-right:8px}</style>
+    </tr>`;
+  }).join("");
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprobante ${placa}</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:24px;color:#222;font-size:12px}
+    h1{color:#cc0000;font-size:20px;margin:0}
+    .sub{color:#888;font-size:11px;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th{background:#cc0000;color:#fff;padding:8px 6px;text-align:center;font-size:10px}
+    td{padding:7px 6px;border-bottom:1px solid #eee;font-size:11px}
+    .totals td{font-weight:700;background:#f0f0f0;border-top:2px solid #cc0000}
+    .footer{margin-top:24px;font-size:10px;color:#aaa;text-align:center}
+    .badge{display:inline-block;background:#cc0000;color:#fff;border-radius:6px;padding:2px 10px;font-size:13px;font-weight:700;margin-right:8px}
+  </style>
   </head><body>
-  <div style="display:flex;align-items:center;margin-bottom:4px"><span style="font-size:28px;margin-right:10px">🚛</span><div><h1>TERMO CARGA</h1><div class="sub">Historial de Pagos – ${HOY.getDate()} de ${MESES_ES[HOY.getMonth()]} de ${ANIO_ACTUAL}</div></div></div>
+  <div style="display:flex;align-items:center;margin-bottom:4px"><span style="font-size:28px;margin-right:10px">🚛</span><div><h1>TERMO CARGA</h1><div class="sub">Comprobante Desglosado de Pagos – ${HOY.getDate()} de ${MESES_ES[HOY.getMonth()]} de ${ANIO_ACTUAL}</div></div></div>
   <div style="margin-bottom:16px"><span class="badge">PLACA</span><span style="font-size:18px;font-weight:700">${placa}</span><span style="margin-left:16px;color:#888">${registros.length} liquidación(es)</span></div>
-  <table><thead><tr><th>QUINCENA</th><th>VALOR VIAJES</th><th>DESC.%</th><th>VALOR FACTURA</th><th>DESC.%</th><th>VALOR CONSIGNAR</th></tr></thead>
-  <tbody>${filas}</tbody>
-  <tfoot><tr class="totals"><td>TOTALES</td><td style="text-align:right">${fmt(total.v)}</td><td></td><td style="text-align:right">${fmt(total.f)}</td><td></td><td style="text-align:right;color:#006b2e">${fmt(total.c)}</td></tr></tfoot>
+  <table>
+    <thead>
+      <tr>
+        <th>PERIODO</th>
+        <th>TOTAL VIAJES</th>
+        <th>DESC. FACTURA</th>
+        <th>VALOR FACTURA</th>
+        <th>DESC. RETENCIÓN</th>
+        <th>VALOR A CONSIGNAR</th>
+      </tr>
+    </thead>
+    <tbody>${filas}</tbody>
+    <tfoot>
+      <tr class="totals">
+        <td>TOTALES</td>
+        <td style="text-align:right">${fmt(total.v)}</td>
+        <td style="text-align:right;color:#c85000">−${fmt(total.df)}</td>
+        <td style="text-align:right;color:#c85000">${fmt(total.f)}</td>
+        <td style="text-align:right;color:#006b2e">−${fmt(total.dc)}</td>
+        <td style="text-align:right;color:#006b2e">${fmt(total.c)}</td>
+      </tr>
+    </tfoot>
   </table>
-  <div class="footer">Termo Carga · Sistema de Gestión de Contratistas · Documento generado automáticamente</div>
+  <div class="footer">Termo Carga · Sistema de Gestión de Contratistas · Documento de Liquidación Detallado</div>
   <script>window.onload=()=>window.print()</script></body></html>`;
   const w=window.open("","_blank"); w.document.write(html); w.document.close();
 }
 
 function exportarCSV(placa, registros, nombre){
   const bom="\uFEFF";
-  const hdr=`sep=,\nTERMO CARGA – HISTORIAL DE PAGOS\nPlaca: ${placa}\nGenerado: ${HOY.getDate()} de ${MESES_ES[HOY.getMonth()]} de ${ANIO_ACTUAL}\n\nQUINCENA,VALOR VIAJES,DESC FACTURA %,VALOR FACTURA,DESC CONSIGNAR %,VALOR A CONSIGNAR\n`;
-  const rows=registros.map(r=>`"${quinceTexto(r)}",${Math.round(r.valorViajes)},${r.pF}%,${Math.round(r.valorFactura)},${r.pC}%,${Math.round(r.valorConsignar)}`).join("\n");
+  const hdr=`sep=,\nTERMO CARGA – HISTORIAL DE PAGOS\nPlaca: ${placa}\nGenerado: ${HOY.getDate()} de ${MESES_ES[HOY.getMonth()]} de ${ANIO_ACTUAL}\n\nQUINCENA,VALOR VIAJES,DESCUENTO FACTURA,VALOR FACTURA,DESCUENTO RETENCION,VALOR A CONSIGNAR\n`;
+  const rows=registros.map(r=>{
+    const dF = r.descF || (r.valorViajes - r.valorFactura);
+    const dC = r.descC || (r.valorFactura - r.valorConsignar);
+    return `"${quinceTexto(r)}",${Math.round(r.valorViajes)},-${Math.round(dF)},${Math.round(r.valorFactura)},-${Math.round(dC)},${Math.round(r.valorConsignar)}`;
+  }).join("\n");
   const tot=registros.reduce((a,r)=>a+r.valorConsignar,0);
   const foot=`\nTOTAL,,,,,${Math.round(tot)}`;
   const blob=new Blob([bom+hdr+rows+foot],{type:"text/csv;charset=utf-8"});
@@ -202,7 +254,6 @@ export default function App(){
 
   const [tab,   setTab]   = useState(0);
   
-  // Cargar datos persistidos o usar la lista DEMO la primera vez
   const [datos, setDatos] = useState(() => {
     const saved = localStorage.getItem("termocarga_datos");
     return saved ? JSON.parse(saved) : DEMO;
@@ -226,12 +277,10 @@ export default function App(){
   const [busqPlaca, setBusqPlaca] = useState("");
   const [vehiculoSel,setVehiculoSel] = useState(null);
 
-  // Persistir cambios en los datos en el navegador
   useEffect(() => {
     localStorage.setItem("termocarga_datos", JSON.stringify(datos));
   }, [datos]);
 
-  // Persistir cambios de contraseña
   const handleGuardarClave = (nuevaClave) => {
     setClave(nuevaClave);
     localStorage.setItem("termocarga_clave", nuevaClave);
@@ -240,7 +289,7 @@ export default function App(){
   const pF = parseFloat(pctF)||0;
   const pC = parseFloat(pctC)||0;
   const v  = parseFloat(valor.replace(/[^0-9.]/g,""))||0;
-  const {f,c} = calcular(v,pF,pC);
+  const {f,c,descF,descC} = calcular(v,pF,pC);
 
   const fechaHoy=`${DIAS[HOY.getDay()]} ${HOY.getDate()} de ${MESES_ES[HOY.getMonth()]} de ${ANIO_ACTUAL}`;
   const aniosUnicos=["Todos",...[...new Set(datos.map(r=>r.anio))].sort()];
@@ -282,7 +331,7 @@ export default function App(){
     if(!placa.trim()){setMsg("Ingrese la placa del vehículo."); return;}
     if(v<=0){setMsg("Ingrese un valor de viajes válido."); return;}
     setMsg(null);
-    setModal({placa:placa.toUpperCase(),quincena:parseInt(quincena),mes:parseInt(mes),anio:ANIO_ACTUAL,v,pF,pC,f,c});
+    setModal({placa:placa.toUpperCase(),quincena:parseInt(quincena),mes:parseInt(mes),anio:ANIO_ACTUAL,v,pF,pC,f,c,descF,descC});
   }
   function confirmarLiquidacion(){
     const m=modal;
@@ -421,23 +470,34 @@ export default function App(){
               <span style={{fontSize:14,fontWeight:700,color:"#333"}}>{ANIO_ACTUAL}</span>
             </div>
             <div style={{borderTop:"1.5px solid #ffcccc",paddingTop:14}}>
-              <div style={{fontWeight:700,fontSize:13,color:"#cc0000",marginBottom:12}}>💰 Valores</div>
+              <div style={{fontWeight:700,fontSize:13,color:"#cc0000",marginBottom:12}}>💰 Valores Desglosados</div>
               <div style={{marginBottom:14}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#888",marginBottom:5}}>VALOR TOTAL DE VIAJES ($)</div>
                 <input style={{...INPUT,fontSize:17,fontWeight:700,borderColor:"#cc0000"}} placeholder="0" value={valor} onChange={e=>setValor(e.target.value)} inputMode="numeric"/>
               </div>
+
+              {/* BLOQUE DESCUENTO FACTURA */}
               <div style={{borderLeft:"4px solid #dc6e00",background:"#fffaf4",padding:"10px 14px",borderRadius:"0 8px 8px 0",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><div style={{fontSize:10,fontWeight:700,color:"#dc6e00"}}>VALOR FACTURA (−{pctF}%)</div><div style={{fontSize:10,color:"#bbb"}}>Descuento sobre valor de viajes</div></div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"#dc6e00"}}>VALOR FACTURA ({pctF}%)</div>
+                    <div style={{fontSize:11,color:"#d9534f",fontWeight:700}}>Descuento: −{v>0?fmt(descF):"$ 0"}</div>
+                  </div>
                   <div style={{fontSize:19,fontWeight:800,color:"#dc6e00"}}>{v>0?fmt(f):"$ 0"}</div>
                 </div>
               </div>
+
+              {/* BLOQUE DESCUENTO CONSIGNAR */}
               <div style={{borderLeft:"4px solid #008c3c",background:"#f4fff8",padding:"10px 14px",borderRadius:"0 8px 8px 0",marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><div style={{fontSize:10,fontWeight:700,color:"#008c3c"}}>VALOR A CONSIGNAR (−{pctC}%)</div><div style={{fontSize:10,color:"#bbb"}}>Pago neto al contratista</div></div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"#008c3c"}}>VALOR A CONSIGNAR ({pctC}%)</div>
+                    <div style={{fontSize:11,color:"#d9534f",fontWeight:700}}>Descuento: −{v>0?fmt(descC):"$ 0"}</div>
+                  </div>
                   <div style={{fontSize:19,fontWeight:800,color:"#008c3c"}}>{v>0?fmt(c):"$ 0"}</div>
                 </div>
               </div>
+
               <button style={BTN_ROJO} onClick={solicitarLiquidacion}>💵  Liquidar Quincena</button>
               <button style={BTN_BORDE} onClick={()=>{setPlaca("");setValor("");setMsg(null);}}>↺  Limpiar</button>
             </div>
@@ -623,6 +683,7 @@ export default function App(){
       )}
       </div>
 
+      {/* MODAL RESUMEN */}
       {modal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:999}}>
           <div style={{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,padding:"24px 20px 36px"}}>
@@ -641,14 +702,20 @@ export default function App(){
             </div>
             <div style={{borderLeft:"4px solid #dc6e00",background:"#fffaf4",padding:"12px 14px",borderRadius:"0 10px 10px 0",marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontSize:11,fontWeight:700,color:"#dc6e00"}}>VALOR FACTURA</div><div style={{fontSize:10,color:"#bbb"}}>Descuento del {modal.pF}%</div></div>
-                <div style={{textAlign:"right"}}><div style={{fontSize:17,fontWeight:800,color:"#dc6e00"}}>{fmt(modal.f)}</div><div style={{fontSize:10,color:"#bbb"}}>−{fmt(modal.v-modal.f)}</div></div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#dc6e00"}}>VALOR FACTURA</div>
+                  <div style={{fontSize:10,color:"#d9534f",fontWeight:700}}>−{fmt(modal.descF)} ({modal.pF}%)</div>
+                </div>
+                <div style={{textAlign:"right"}}><div style={{fontSize:17,fontWeight:800,color:"#dc6e00"}}>{fmt(modal.f)}</div></div>
               </div>
             </div>
             <div style={{borderLeft:"4px solid #008c3c",background:"#f4fff8",padding:"12px 14px",borderRadius:"0 10px 10px 0",marginBottom:22}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontSize:11,fontWeight:700,color:"#008c3c"}}>VALOR A CONSIGNAR</div><div style={{fontSize:10,color:"#bbb"}}>Descuento adicional del {modal.pC}%</div></div>
-                <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800,color:"#008c3c"}}>{fmt(modal.c)}</div><div style={{fontSize:10,color:"#bbb"}}>−{fmt(modal.f-modal.c)}</div></div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#008c3c"}}>VALOR A CONSIGNAR</div>
+                  <div style={{fontSize:10,color:"#d9534f",fontWeight:700}}>−{fmt(modal.descC)} ({modal.pC}%)</div>
+                </div>
+                <div style={{textAlign:"right"}}><div style={{fontSize:22,fontWeight:800,color:"#008c3c"}}>{fmt(modal.c)}</div></div>
               </div>
             </div>
             <button onClick={confirmarLiquidacion} style={{width:"100%",padding:14,background:"linear-gradient(90deg,#cc0000,#960000)",color:"#fff",border:"none",borderRadius:12,fontWeight:800,fontSize:16,cursor:"pointer",marginBottom:10}}>
